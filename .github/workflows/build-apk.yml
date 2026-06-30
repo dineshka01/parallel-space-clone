@@ -34,12 +34,12 @@ jobs:
       - name: Check for bcore.aar
         id: check_aar
         run: |
-          if [ -f "app/libs/bcore.aar" ] && [ $(stat -c%s "app/libs/bcore.aar") -gt 10000 ]; then
+          if [ -f "app/libs/bcore.aar" ] && [ $(stat -c%s "app/libs/bcore.aar") -gt 50000 ]; then
             echo "found=true" >> $GITHUB_OUTPUT
             echo "bcore.aar found ($(stat -c%s app/libs/bcore.aar) bytes)"
           else
             echo "found=false" >> $GITHUB_OUTPUT
-            echo "bcore.aar not found — will build from NewBlackbox source"
+            echo "bcore.aar not found — building from source"
           fi
 
       - name: Clone NewBlackbox and Build Bcore AAR
@@ -47,23 +47,64 @@ jobs:
         run: |
           git clone --depth=1 https://github.com/ALEX5402/NewBlackbox.git /tmp/NewBlackbox
           cd /tmp/NewBlackbox
+
+          # Override settings.gradle to remove Aliyun mirrors (blocked on GitHub Actions)
+          cat > settings.gradle << 'SETTINGS_EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "NewBlackbox"
+          include ':app'
+          include ':Bcore'
+          include ':black-reflection'
+          include ':compiler'
+          SETTINGS_EOF
+
+          # Also override root build.gradle to remove allprojects repos
+          cat > build.gradle << 'BUILD_EOF'
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:8.7.3'
+              }
+          }
+          tasks.register('clean', Delete) {
+              delete rootProject.layout.buildDirectory
+          }
+          BUILD_EOF
+
           chmod +x gradlew
-          ./gradlew :Bcore:assembleRelease --no-daemon --stacktrace 2>&1 | tail -30
-          AAR=$(find Bcore/build/outputs/aar -name "*release*.aar" 2>/dev/null | head -1)
-          if [ -n "$AAR" ] && [ -f "$AAR" ]; then
+          ./gradlew :Bcore:assembleRelease --no-daemon --stacktrace 2>&1 | tail -50
+
+          AAR=$(find Bcore/build/outputs/aar -name "*.aar" 2>/dev/null | head -1)
+          if [ -n "$AAR" ] && [ -f "$AAR" ] && [ $(stat -c%s "$AAR") -gt 1000 ]; then
             mkdir -p $GITHUB_WORKSPACE/app/libs
             cp "$AAR" $GITHUB_WORKSPACE/app/libs/bcore.aar
-            echo "Copied: $AAR ($(stat -c%s $GITHUB_WORKSPACE/app/libs/bcore.aar) bytes)"
+            echo "SUCCESS: Copied $AAR ($(stat -c%s $GITHUB_WORKSPACE/app/libs/bcore.aar) bytes)"
           else
-            echo "ERROR: Bcore AAR not found after build"
-            find Bcore/build -name "*.aar" 2>/dev/null
+            echo "Bcore build output:"
+            find /tmp/NewBlackbox/Bcore/build -name "*.aar" 2>/dev/null || echo "No AAR found"
             exit 1
           fi
 
       - name: Verify bcore.aar
         run: |
           ls -lh app/libs/bcore.aar
-          echo "AAR size: $(stat -c%s app/libs/bcore.aar) bytes"
+          echo "Size: $(stat -c%s app/libs/bcore.aar) bytes"
 
       - name: Cache Gradle
         uses: actions/cache@v4
@@ -88,7 +129,7 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
-      - name: Build Release APK (Unsigned)
+      - name: Build Release APK
         run: ./gradlew assembleRelease --no-daemon
         continue-on-error: true
 
@@ -100,4 +141,4 @@ jobs:
           if-no-files-found: warn
 
       - name: Show APK Files
-        run: find app/build/outputs -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
+        run: find app/build/outputs -name "*.apk" 2>/dev/null || echo "No APK found"
