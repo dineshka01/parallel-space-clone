@@ -28,8 +28,10 @@ jobs:
       - name: Accept Android Licenses
         run: yes | sdkmanager --licenses || true
 
-      - name: Install Android Build Tools
-        run: sdkmanager "build-tools;35.0.0" "platforms;android-35" "platform-tools"
+      - name: Install Android Build Tools + NDK
+        run: |
+          sdkmanager "build-tools;35.0.0" "platforms;android-35" "platform-tools"
+          sdkmanager "ndk;29.0.13846066"
 
       - name: Check for bcore.aar
         id: check_aar
@@ -48,56 +50,57 @@ jobs:
           git clone --depth=1 https://github.com/ALEX5402/NewBlackbox.git /tmp/NewBlackbox
           cd /tmp/NewBlackbox
 
-          # Override settings.gradle to remove Aliyun mirrors (blocked on GitHub Actions)
-          cat > settings.gradle << 'SETTINGS_EOF'
-          pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
-          }
-          dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
-          rootProject.name = "NewBlackbox"
-          include ':app'
-          include ':Bcore'
-          include ':black-reflection'
-          include ':compiler'
-          SETTINGS_EOF
+          echo "=== Original settings.gradle ==="
+          cat settings.gradle
 
-          # Also override root build.gradle to remove allprojects repos
-          cat > build.gradle << 'BUILD_EOF'
-          buildscript {
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-              dependencies {
-                  classpath 'com.android.tools.build:gradle:8.7.3'
-              }
-          }
-          tasks.register('clean', Delete) {
-              delete rootProject.layout.buildDirectory
-          }
-          BUILD_EOF
+          # Replace ONLY settings.gradle — remove Aliyun mirrors, keep all else intact
+          cat > settings.gradle << 'SETTINGS_EOF'
+pluginManagement {
+    repositories {
+        maven { url "https://www.jitpack.io" }
+        google {
+            content {
+                includeGroupByRegex("com\\.android.*")
+                includeGroupByRegex("com\\.google.*")
+                includeGroupByRegex("androidx.*")
+            }
+        }
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        maven { url "https://www.jitpack.io" }
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "NewBlackbox"
+
+include ':app'
+include(":black-reflection")
+include(":compiler")
+include ':Bcore'
+SETTINGS_EOF
+
+          echo "=== Modified settings.gradle ==="
+          cat settings.gradle
 
           chmod +x gradlew
-          ./gradlew :Bcore:assembleRelease --no-daemon --stacktrace 2>&1 | tail -50
+          ./gradlew :Bcore:assembleRelease --no-daemon --stacktrace 2>&1 | tail -60
 
           AAR=$(find Bcore/build/outputs/aar -name "*.aar" 2>/dev/null | head -1)
           if [ -n "$AAR" ] && [ -f "$AAR" ] && [ $(stat -c%s "$AAR") -gt 1000 ]; then
             mkdir -p $GITHUB_WORKSPACE/app/libs
             cp "$AAR" $GITHUB_WORKSPACE/app/libs/bcore.aar
-            echo "SUCCESS: Copied $AAR ($(stat -c%s $GITHUB_WORKSPACE/app/libs/bcore.aar) bytes)"
+            echo "SUCCESS: $(stat -c%s $GITHUB_WORKSPACE/app/libs/bcore.aar) bytes"
           else
-            echo "Bcore build output:"
-            find /tmp/NewBlackbox/Bcore/build -name "*.aar" 2>/dev/null || echo "No AAR found"
+            echo "ERROR: Bcore AAR not found after build"
+            find /tmp/NewBlackbox/Bcore/build -name "*.aar" 2>/dev/null || true
+            find /tmp/NewBlackbox/Bcore/build -name "*.log" 2>/dev/null -exec cat {} \; || true
             exit 1
           fi
 
