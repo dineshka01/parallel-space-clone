@@ -28,10 +28,14 @@ jobs:
       - name: Accept Android Licenses
         run: yes | sdkmanager --licenses || true
 
-      - name: Install Android Build Tools + NDK
+      - name: Install Android Build Tools
+        run: sdkmanager "build-tools;35.0.0" "platforms;android-35" "platform-tools"
+
+      - name: Check pre-installed NDK
         run: |
-          sdkmanager "build-tools;35.0.0" "platforms;android-35" "platform-tools"
-          sdkmanager "ndk;29.0.13846066"
+          echo "Default NDK: $ANDROID_NDK_ROOT"
+          echo "Latest NDK:  $ANDROID_NDK_LATEST_HOME"
+          ls $ANDROID_SDK_ROOT/ndk/ 2>/dev/null || echo "No NDK dir"
 
       - name: Check for bcore.aar
         id: check_aar
@@ -46,14 +50,18 @@ jobs:
 
       - name: Clone NewBlackbox and Build Bcore AAR
         if: steps.check_aar.outputs.found == 'false'
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
         run: |
+          # Use the NDK that's actually installed (29.0.14206865)
+          NDK_VERSION=$(ls $ANDROID_SDK_ROOT/ndk/ | sort -V | tail -1)
+          NDK_PATH="$ANDROID_SDK_ROOT/ndk/$NDK_VERSION"
+          echo "Using NDK: $NDK_VERSION at $NDK_PATH"
+
           git clone --depth=1 https://github.com/ALEX5402/NewBlackbox.git /tmp/NewBlackbox
           cd /tmp/NewBlackbox
 
-          echo "=== Original settings.gradle ==="
-          cat settings.gradle
-
-          # Replace ONLY settings.gradle — remove Aliyun mirrors, keep all else intact
+          # Override settings.gradle — remove Aliyun mirrors, keep structure intact
           cat > settings.gradle << 'SETTINGS_EOF'
 pluginManagement {
     repositories {
@@ -86,11 +94,17 @@ include(":compiler")
 include ':Bcore'
 SETTINGS_EOF
 
-          echo "=== Modified settings.gradle ==="
-          cat settings.gradle
+          # Point local.properties to the installed NDK version
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          echo "ndk.dir=$NDK_PATH" >> local.properties
+
+          # Patch Bcore/build.gradle ndkVersion to match installed NDK
+          sed -i "s/ndkVersion = \"[^\"]*\"/ndkVersion = \"$NDK_VERSION\"/" Bcore/build.gradle
+          echo "Bcore ndkVersion line:"
+          grep "ndkVersion" Bcore/build.gradle
 
           chmod +x gradlew
-          ./gradlew :Bcore:assembleRelease --no-daemon --stacktrace 2>&1 | tail -60
+          ./gradlew :Bcore:assembleRelease --no-daemon --stacktrace 2>&1 | tail -80
 
           AAR=$(find Bcore/build/outputs/aar -name "*.aar" 2>/dev/null | head -1)
           if [ -n "$AAR" ] && [ -f "$AAR" ] && [ $(stat -c%s "$AAR") -gt 1000 ]; then
@@ -100,7 +114,6 @@ SETTINGS_EOF
           else
             echo "ERROR: Bcore AAR not found after build"
             find /tmp/NewBlackbox/Bcore/build -name "*.aar" 2>/dev/null || true
-            find /tmp/NewBlackbox/Bcore/build -name "*.log" 2>/dev/null -exec cat {} \; || true
             exit 1
           fi
 
