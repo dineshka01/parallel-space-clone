@@ -1,7 +1,6 @@
 package com.yourpackage.parallelspace
 
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -26,9 +25,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupUI() {
         binding.fabAdd.setOnClickListener { showAppPicker() }
-
         binding.recyclerClones.layoutManager = GridLayoutManager(this, 3)
-
         updateSubtitle()
     }
 
@@ -55,23 +52,23 @@ class MainActivity : AppCompatActivity() {
         val id = clone.identity
 
         AlertDialog.Builder(this)
-            .setTitle("✅ ${clone.appName}")
+            .setTitle("${clone.appName}")
             .setMessage("""
                 NEW VIRTUAL ENVIRONMENT
-                
-                📱 ${id.brand} ${id.model}
-                🆔 DeviceID: ${id.deviceId}
-                📱 IMEI: ${id.imei}
-                📶 WiFi MAC: ${id.wifiMac}
-                🆔 Android ID: ${id.androidId}
-                🆔 GAID: ${id.advertisingId}
-                📍 ${id.locale} / ${id.timezone}
-                
-                ✅ 21/21 Permissions Granted
-                🔒 Google Accounts: Hidden
-                ⚡ BlackBox Virtual Engine
+
+                ${id.brand} ${id.model}
+                DeviceID: ${id.deviceId}
+                IMEI: ${id.imei}
+                WiFi MAC: ${id.wifiMac}
+                Android ID: ${id.androidId}
+                GAID: ${id.advertisingId}
+                ${id.locale} / ${id.timezone}
+
+                21/21 Permissions Granted
+                Google Accounts: Hidden
+                BlackBox Virtual Engine
             """.trimIndent())
-            .setPositiveButton("🚀 Launch Clone") { _, _ ->
+            .setPositiveButton("Launch Clone") { _, _ ->
                 cloneManager.launchClone(clone)
                 Toast.makeText(this, "Launching ${clone.appName} in Virtual Space", Toast.LENGTH_LONG).show()
             }

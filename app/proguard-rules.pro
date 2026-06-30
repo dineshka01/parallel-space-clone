@@ -1,0 +1,3 @@
+-keep class top.niunaijun.blackbox.** { *; }
+-keep class com.yourpackage.parallelspace.** { *; }
+-dontwarn top.niunaijun.**

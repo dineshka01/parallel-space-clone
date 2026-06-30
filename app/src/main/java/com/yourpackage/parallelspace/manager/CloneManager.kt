@@ -2,7 +2,6 @@ package com.yourpackage.parallelspace.manager
 
 import android.content.Context
 import android.content.pm.PackageManager
-import android.graphics.drawable.Drawable
 import top.niunaijun.blackbox.BlackBoxCore
 import top.niunaijun.blackbox.core.system.user.BUserInfo
 import com.yourpackage.parallelspace.identity.IdentityGenerator
@@ -49,16 +48,13 @@ class CloneManager(private val context: Context) {
         val appName = pm.getApplicationLabel(appInfo)?.toString() ?: packageName
         val icon = appInfo?.let { pm.getApplicationIcon(it) }
 
-        // Step 1: Generate fresh random identity
         val identity = identityGenerator.generate()
 
-        // Step 2: Create new virtual user in BlackBox
         val userInfo = BUserInfo().apply {
             name = "Clone_${identity.deviceId.take(6)}"
         }
         val userId = BlackBoxCore.get().createUser(userInfo)
 
-        // Step 3: Install app into BlackBox
         val apkPath = appInfo?.sourceDir
         if (apkPath != null) {
             BlackBoxCore.get().installPackageAsUser(File(apkPath), userId)
@@ -86,7 +82,6 @@ class CloneManager(private val context: Context) {
 
     fun getAllClones(): List<AppClone> {
         val json = prefs.getString("clones", "[]") ?: "[]"
-        // Parse from JSON — simplified
         return emptyList()
     }
 

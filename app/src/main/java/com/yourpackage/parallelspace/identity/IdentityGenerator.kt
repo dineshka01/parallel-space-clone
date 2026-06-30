@@ -25,7 +25,7 @@ class IdentityGenerator {
             advertisingId = UUID.randomUUID().toString(),
             wifiMac = randomMac(),
             bluetoothMac = randomMac(),
-            wifiSsid = "${listOf("HOME","WiFi","NET","Fiber","Office")[random.nextInt(5)]}-${random.nextInt(1000,99999)}",
+            wifiSsid = "${listOf("HOME","WiFi","NET","Fiber","Office")[random.nextInt(5)]}-${random.nextInt(1000, 99999)}",
             wifiBssid = randomMac(),
             imei = generateIMEI(),
             imsi = generateIMSI(),
@@ -50,10 +50,10 @@ class IdentityGenerator {
             osVersion = androidVer,
             sdkVersion = sdk,
             screenResolution = RESOLUTIONS[random.nextInt(RESOLUTIONS.size)],
-            screenDensity = listOf(420,440,480,560,640)[random.nextInt(5)],
-            totalRam = listOf(6L,8L,12L,16L,24L)[random.nextInt(5)] * 1024L * 1024L * 1024L,
-            totalStorage = listOf(128L,256L,512L,1000L)[random.nextInt(4)] * 1024L * 1024L * 1024L,
-            coreCount = listOf(8,8,10,12)[random.nextInt(4)],
+            screenDensity = listOf(420, 440, 480, 560, 640)[random.nextInt(5)],
+            totalRam = listOf(6L, 8L, 12L, 16L, 24L)[random.nextInt(5)] * 1024L * 1024L * 1024L,
+            totalStorage = listOf(128L, 256L, 512L, 1000L)[random.nextInt(4)] * 1024L * 1024L * 1024L,
+            coreCount = listOf(8, 8, 10, 12)[random.nextInt(4)],
             batteryLevel = random.nextFloat() * 0.7f + 0.2f,
             availableAccounts = emptyList()
         )
