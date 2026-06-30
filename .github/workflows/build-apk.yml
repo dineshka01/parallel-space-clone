@@ -31,11 +31,8 @@ jobs:
       - name: Install Android Build Tools
         run: sdkmanager "build-tools;35.0.0" "platforms;android-35" "platform-tools"
 
-      - name: Check pre-installed NDK
-        run: |
-          echo "Default NDK: $ANDROID_NDK_ROOT"
-          echo "Latest NDK:  $ANDROID_NDK_LATEST_HOME"
-          ls $ANDROID_SDK_ROOT/ndk/ 2>/dev/null || echo "No NDK dir"
+      - name: Show pre-installed NDK versions
+        run: ls $ANDROID_SDK_ROOT/ndk/ 2>/dev/null && echo "NDK_LATEST=$ANDROID_NDK_LATEST_HOME"
 
       - name: Check for bcore.aar
         id: check_aar
@@ -45,82 +42,47 @@ jobs:
             echo "bcore.aar found ($(stat -c%s app/libs/bcore.aar) bytes)"
           else
             echo "found=false" >> $GITHUB_OUTPUT
-            echo "bcore.aar not found — building from source"
+            echo "bcore.aar not found, will build from source"
           fi
 
-      - name: Clone NewBlackbox and Build Bcore AAR
+      - name: Build Bcore AAR from NewBlackbox
         if: steps.check_aar.outputs.found == 'false'
-        env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
         run: |
-          # Use the NDK that's actually installed (29.0.14206865)
-          NDK_VERSION=$(ls $ANDROID_SDK_ROOT/ndk/ | sort -V | tail -1)
-          NDK_PATH="$ANDROID_SDK_ROOT/ndk/$NDK_VERSION"
-          echo "Using NDK: $NDK_VERSION at $NDK_PATH"
+          NDK_VER=$(ls $ANDROID_SDK_ROOT/ndk/ | sort -V | tail -1)
+          NDK_DIR="$ANDROID_SDK_ROOT/ndk/$NDK_VER"
+          echo "Using NDK: $NDK_VER at $NDK_DIR"
 
           git clone --depth=1 https://github.com/ALEX5402/NewBlackbox.git /tmp/NewBlackbox
           cd /tmp/NewBlackbox
 
-          # Override settings.gradle — remove Aliyun mirrors, keep structure intact
-          cat > settings.gradle << 'SETTINGS_EOF'
-pluginManagement {
-    repositories {
-        maven { url "https://www.jitpack.io" }
-        google {
-            content {
-                includeGroupByRegex("com\\.android.*")
-                includeGroupByRegex("com\\.google.*")
-                includeGroupByRegex("androidx.*")
-            }
-        }
-        mavenCentral()
-        gradlePluginPortal()
-    }
-}
-dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-    repositories {
-        maven { url "https://www.jitpack.io" }
-        google()
-        mavenCentral()
-    }
-}
-
-rootProject.name = "NewBlackbox"
-
-include ':app'
-include(":black-reflection")
-include(":compiler")
-include ':Bcore'
-SETTINGS_EOF
-
-          # Point local.properties to the installed NDK version
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          echo "ndk.dir=$NDK_PATH" >> local.properties
+          echo "ndk.dir=$NDK_DIR" >> local.properties
 
-          # Patch Bcore/build.gradle ndkVersion to match installed NDK
-          sed -i "s/ndkVersion = \"[^\"]*\"/ndkVersion = \"$NDK_VERSION\"/" Bcore/build.gradle
-          echo "Bcore ndkVersion line:"
+          # Remove Aliyun URLs from settings.gradle using sed
+          sed -i "/maven.aliyun/d" settings.gradle
+          sed -i "/aliyun/d" settings.gradle
+          cat settings.gradle
+
+          # Patch ndkVersion in Bcore/build.gradle to match installed NDK
+          sed -i "s|ndkVersion = \"[^\"]*\"|ndkVersion = \"$NDK_VER\"|g" Bcore/build.gradle
           grep "ndkVersion" Bcore/build.gradle
 
           chmod +x gradlew
-          ./gradlew :Bcore:assembleRelease --no-daemon --stacktrace 2>&1 | tail -80
+          ./gradlew :Bcore:assembleRelease --no-daemon --stacktrace 2>&1 | tail -100
 
           AAR=$(find Bcore/build/outputs/aar -name "*.aar" 2>/dev/null | head -1)
-          if [ -n "$AAR" ] && [ -f "$AAR" ] && [ $(stat -c%s "$AAR") -gt 1000 ]; then
+          if [ -n "$AAR" ] && [ $(stat -c%s "$AAR") -gt 1000 ]; then
             mkdir -p $GITHUB_WORKSPACE/app/libs
             cp "$AAR" $GITHUB_WORKSPACE/app/libs/bcore.aar
             echo "SUCCESS: $(stat -c%s $GITHUB_WORKSPACE/app/libs/bcore.aar) bytes"
           else
-            echo "ERROR: Bcore AAR not found after build"
-            find /tmp/NewBlackbox/Bcore/build -name "*.aar" 2>/dev/null || true
+            echo "ERROR: Bcore AAR not produced"
+            find /tmp/NewBlackbox/Bcore/build -type f 2>/dev/null | head -20
             exit 1
           fi
 
       - name: Verify bcore.aar
-        run: |
-          ls -lh app/libs/bcore.aar
-          echo "Size: $(stat -c%s app/libs/bcore.aar) bytes"
+        run: ls -lh app/libs/bcore.aar && echo "$(stat -c%s app/libs/bcore.aar) bytes"
 
       - name: Cache Gradle
         uses: actions/cache@v4
@@ -129,8 +91,7 @@ SETTINGS_EOF
             ~/.gradle/caches
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
+          restore-keys: ${{ runner.os }}-gradle-
 
       - name: Grant Gradle Wrapper Permission
         run: chmod +x gradlew
@@ -155,6 +116,3 @@ SETTINGS_EOF
           name: ParallelSpace-Release-APK
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: warn
-
-      - name: Show APK Files
-        run: find app/build/outputs -name "*.apk" 2>/dev/null || echo "No APK found"
