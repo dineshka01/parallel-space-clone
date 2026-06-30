@@ -15,10 +15,10 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup JDK 17
+      - name: Setup JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'temurin'
           cache: gradle
 
@@ -36,49 +36,34 @@ jobs:
         run: |
           if [ -f "app/libs/bcore.aar" ] && [ $(stat -c%s "app/libs/bcore.aar") -gt 10000 ]; then
             echo "found=true" >> $GITHUB_OUTPUT
-            echo "bcore.aar found in app/libs"
+            echo "bcore.aar found ($(stat -c%s app/libs/bcore.aar) bytes)"
           else
             echo "found=false" >> $GITHUB_OUTPUT
-            echo "bcore.aar not found or too small, will build from source"
+            echo "bcore.aar not found — will build from NewBlackbox source"
           fi
 
-      - name: Clone NewBlackbox and Build Bcore
+      - name: Clone NewBlackbox and Build Bcore AAR
         if: steps.check_aar.outputs.found == 'false'
         run: |
           git clone --depth=1 https://github.com/ALEX5402/NewBlackbox.git /tmp/NewBlackbox
           cd /tmp/NewBlackbox
           chmod +x gradlew
-          # Try to build the Bcore module if it exists
-          if grep -q "Bcore" settings.gradle; then
-            ./gradlew :Bcore:assembleRelease --no-daemon --stacktrace 2>&1 | tail -50 || true
-            # Find and copy the AAR
-            find . -name "*.aar" -path "*/Bcore/*" | head -5
-            AAR=$(find . -name "*.aar" -path "*/Bcore/*release*" | head -1)
-            if [ -n "$AAR" ] && [ -f "$AAR" ]; then
-              mkdir -p $GITHUB_WORKSPACE/app/libs
-              cp "$AAR" $GITHUB_WORKSPACE/app/libs/bcore.aar
-              echo "Copied Bcore AAR: $AAR"
-            else
-              echo "Bcore build failed, trying full project build..."
-              ./gradlew assembleRelease --no-daemon 2>&1 | tail -30 || true
-              AAR=$(find . -name "*.aar" | head -1)
-              if [ -n "$AAR" ]; then
-                cp "$AAR" $GITHUB_WORKSPACE/app/libs/bcore.aar
-                echo "Copied AAR: $AAR"
-              fi
-            fi
+          ./gradlew :Bcore:assembleRelease --no-daemon --stacktrace 2>&1 | tail -30
+          AAR=$(find Bcore/build/outputs/aar -name "*release*.aar" 2>/dev/null | head -1)
+          if [ -n "$AAR" ] && [ -f "$AAR" ]; then
+            mkdir -p $GITHUB_WORKSPACE/app/libs
+            cp "$AAR" $GITHUB_WORKSPACE/app/libs/bcore.aar
+            echo "Copied: $AAR ($(stat -c%s $GITHUB_WORKSPACE/app/libs/bcore.aar) bytes)"
+          else
+            echo "ERROR: Bcore AAR not found after build"
+            find Bcore/build -name "*.aar" 2>/dev/null
+            exit 1
           fi
 
       - name: Verify bcore.aar
         run: |
-          mkdir -p app/libs
-          if [ -f "app/libs/bcore.aar" ] && [ $(stat -c%s "app/libs/bcore.aar") -gt 10000 ]; then
-            echo "bcore.aar is ready ($(stat -c%s app/libs/bcore.aar) bytes)"
-          else
-            echo "WARNING: bcore.aar missing or invalid — creating placeholder stub"
-            # Create a minimal valid ZIP (AAR is a ZIP file) so Gradle doesn't crash
-            echo "PK" > app/libs/bcore.aar
-          fi
+          ls -lh app/libs/bcore.aar
+          echo "AAR size: $(stat -c%s app/libs/bcore.aar) bytes"
 
       - name: Cache Gradle
         uses: actions/cache@v4
@@ -101,10 +86,10 @@ jobs:
         with:
           name: ParallelSpace-Debug-APK
           path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: warn
+          if-no-files-found: error
 
       - name: Build Release APK (Unsigned)
-        run: ./gradlew assembleRelease --no-daemon --stacktrace
+        run: ./gradlew assembleRelease --no-daemon
         continue-on-error: true
 
       - name: Upload Release APK
@@ -114,7 +99,5 @@ jobs:
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: warn
 
-      - name: Show Build Outputs
-        run: |
-          echo "=== APK Files ==="
-          find app/build/outputs -name "*.apk" -type f 2>/dev/null || echo "No APK found"
+      - name: Show APK Files
+        run: find app/build/outputs -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
