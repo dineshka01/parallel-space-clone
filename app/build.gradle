@@ -1,0 +1,85 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace 'com.yourpackage.parallelspace'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.yourpackage.parallelspace"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+        multiDexEnabled true
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        viewBinding true
+    }
+
+    lintOptions {
+        abortOnError false
+    }
+
+    // BlackBox ke liye zaroori
+    packagingOptions {
+        resources {
+            excludes += ['META-INF/DEPENDENCIES', 'META-INF/LICENSE', 'META-INF/LICENSE.txt', 'META-INF/NOTICE', 'META-INF/NOTICE.txt']
+        }
+    }
+}
+
+dependencies {
+    // BlackBox Core
+    implementation fileTree(dir: 'libs', include: ['*.aar', '*.jar'])
+
+    // AndroidX
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'com.google.android.material:material:1.12.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.2.1'
+    implementation 'androidx.recyclerview:recyclerview:1.4.0'
+    implementation 'androidx.cardview:cardview:1.0.0'
+    implementation 'androidx.multidex:multidex:2.0.1'
+
+    // Google Play Services (required for Google apps)
+    implementation 'com.google.android.gms:play-services-base:18.5.0'
+    implementation 'com.google.android.gms:play-services-ads-identifier:18.1.0'
+    implementation 'com.google.android.play:review:2.0.2'
+}
+
+// BlackBox ke liye: Bcore module ke native libs extract karein
+task extractBcoreNativeLibs {
+    doLast {
+        def aarFile = file('libs/bcore.aar')
+        if (aarFile.exists()) {
+            def outputDir = file("$buildDir/intermediates/aar_extracted")
+            copy {
+                from zipTree(aarFile)
+                into outputDir
+                include 'jni/**/*.so'
+            }
+        }
+    }
+}
+
+tasks.whenTaskAdded { task ->
+    if (task.name.startsWith('merge') && task.name.endsWith('NativeLibs')) {
+        task.dependsOn extractBcoreNativeLibs
+    }
+}
