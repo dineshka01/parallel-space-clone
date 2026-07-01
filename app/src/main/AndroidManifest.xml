@@ -54,33 +54,7 @@
             android:name=".CloneDetailActivity"
             android:exported="false" />
 
-        <activity
-            android:name="top.niunaijun.blackbox.BActivity"
-            android:excludeFromRecents="true"
-            android:exported="false"
-            android:theme="@android:style/Theme.NoDisplay" />
-
-        <activity
-            android:name="top.niunaijun.blackbox.PivotActivity"
-            android:excludeFromRecents="true"
-            android:exported="false"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
-
-        <service
-            android:name="top.niunaijun.blackbox.core.system.VirtualService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-
-        <service
-            android:name="top.niunaijun.blackbox.core.system.BJobService"
-            android:exported="false"
-            android:permission="android.permission.BIND_JOB_SERVICE" />
-
-        <provider
-            android:name="top.niunaijun.blackbox.core.system.VirtualProvider"
-            android:authorities="${applicationId}.virtual_provider"
-            android:exported="false"
-            android:grantUriPermissions="true" />
+        <!-- BlackBox proxy stubs are auto-merged from Bcore AAR manifest -->
 
     </application>
 </manifest>
